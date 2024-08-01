@@ -14,7 +14,7 @@ func (DisconnectHandler) Handle(pk packet.Packet, player human.Human) (bool, pac
 
 	log.Logger.Debugln("Player has been disconnected with reason: ", dataPacket.Message)
 
-	player.Transfer("play.pokebedrock.com", 19132)
+	// player.Transfer("play.pokebedrock.com", 19132)
 
 	return true, dataPacket, nil
 }

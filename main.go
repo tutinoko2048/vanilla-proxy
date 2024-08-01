@@ -26,15 +26,15 @@ func main() {
 }
 
 func loadHandlers() handler.HandlerManager {
-	utils.NewRepeatingTask(60, func() {
-		custom_handlers.FetchClaims()
-	})
+	// utils.NewRepeatingTask(60, func() {
+	// 	custom_handlers.FetchClaims()
+	// })
 
 	h := handlers.New()
 	h.RegisterHandler(packet.IDAvailableCommands, custom_handlers.AvailableCommandsHandler{})
 	h.RegisterHandler(packet.IDCommandRequest, custom_handlers.CommandRequestHandler{})
 	h.RegisterHandler(packet.IDBlockActorData, custom_handlers.SignEditHandler{})
-	h.RegisterHandler(packet.IDInventoryTransaction, custom_handlers.ClaimInventoryTransactionHandler{})
+	// h.RegisterHandler(packet.IDInventoryTransaction, custom_handlers.ClaimInventoryTransactionHandler{})
 	h.RegisterHandler(packet.IDText, custom_handlers.CustomCommandRegisterHandler{})
 	h.RegisterHandler(packet.IDDisconnect, custom_handlers.DisconnectHandler{})
 	h.RegisterHandler(packet.IDItemComponent, custom_handlers.ItemComponentHandler{})

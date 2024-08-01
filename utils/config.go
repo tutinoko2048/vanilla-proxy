@@ -115,33 +115,33 @@ func ReadConfig() Config {
 		panic("Rcon is enabled and not configured in config!")
 	}
 
-	if c.Database.Host == "" {
-		panic("Database Host must be a valid address!")
-	}
+	// if c.Database.Host == "" {
+	// 	panic("Database Host must be a valid address!")
+	// }
 
-	if c.Database.Port == 0 {
-		panic("Database Port must be a valid port number!")
-	}
+	// if c.Database.Port == 0 {
+	// 	panic("Database Port must be a valid port number!")
+	// }
 
-	if c.Api.ApiHost == "" {
-		panic("API Host must be a valid address!")
-	}
+	// if c.Api.ApiHost == "" {
+	// 	panic("API Host must be a valid address!")
+	// }
 
-	if c.Logging.DiscordCommandLogsWebhook == "" {
-		panic("Discord Command Logs Webhook must be provided!")
-	}
+	// if c.Logging.DiscordCommandLogsWebhook == "" {
+	// 	panic("Discord Command Logs Webhook must be provided!")
+	// }
 
-	if c.Logging.DiscordChatLogsWebhook == "" {
-		panic("Discord Chat Logs Webhook must be provided!")
-	}
+	// if c.Logging.DiscordChatLogsWebhook == "" {
+	// 	panic("Discord Chat Logs Webhook must be provided!")
+	// }
 
-	if c.Logging.DiscordErrorLogsWebhook == "" {
-		panic("Discord Error Logs Webhook must be provided!")
-	}
+	// if c.Logging.DiscordErrorLogsWebhook == "" {
+	// 	panic("Discord Error Logs Webhook must be provided!")
+	// }
 
-	if c.Logging.DiscordStaffAlertsWebhook == "" {
-		panic("Discord Staff Alerts Webhook must be provided!")
-	}
+	// if c.Logging.DiscordStaffAlertsWebhook == "" {
+	// 	panic("Discord Staff Alerts Webhook must be provided!")
+	// }
 
 	return c
 }
