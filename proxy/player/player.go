@@ -72,6 +72,14 @@ func (player *Player) SendTip(message string) {
 	player.textPacket(message, packet.TextTypeTip)
 }
 
+func (player *Player) SendToast(title string, message string) {
+	pk := &packet.ToastRequest{
+		Title: title,
+		Message: message,
+	}
+	player.DataPacket(pk)
+}
+
 func (player *Player) SendSound(sound string, volume float32, pitch float32) {
 	pk := &packet.PlaySound{
 		SoundName: sound,
