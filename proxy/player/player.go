@@ -84,6 +84,28 @@ func (player *Player) SendToast(title string, message string) {
 	player.DataPacket(pk)
 }
 
+func (player *Player) setBossbar(title string, percentage float32, color uint32) {
+	player.removeBossbar()
+	pk := &packet.BossEvent{
+		BossEntityUniqueID:	player.GetUniqueID(),
+		PlayerUniqueID:			player.GetUniqueID(),
+		EventType:					packet.BossEventAdd,
+		BossBarTitle:				title,
+		HealthPercentage:		percentage,
+		Color:							color,
+	}
+	player.DataPacket(pk)
+}
+
+func (player *Player) removeBossbar() {
+	pk := &packet.BossEvent{
+		BossEntityUniqueID:	player.GetUniqueID(),
+		PlayerUniqueID:			player.GetUniqueID(),
+		EventType:					packet.BossEventRemove,
+	}
+	player.DataPacket(pk)
+}
+
 func (player *Player) SendSound(sound string, volume float32, pitch float32) {
 	pk := &packet.PlaySound{
 		SoundName: sound,
