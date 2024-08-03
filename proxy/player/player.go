@@ -84,8 +84,8 @@ func (player *Player) SendToast(title string, message string) {
 	player.DataPacket(pk)
 }
 
-func (player *Player) setBossbar(title string, percentage float32, color uint32) {
-	player.removeBossbar()
+func (player *Player) SetBossbar(title string, percentage float32, color uint32) {
+	player.ClearBossbar()
 	pk := &packet.BossEvent{
 		BossEntityUniqueID:	player.GetUniqueID(),
 		PlayerUniqueID:			player.GetUniqueID(),
@@ -97,7 +97,7 @@ func (player *Player) setBossbar(title string, percentage float32, color uint32)
 	player.DataPacket(pk)
 }
 
-func (player *Player) removeBossbar() {
+func (player *Player) ClearBossbar() {
 	pk := &packet.BossEvent{
 		BossEntityUniqueID:	player.GetUniqueID(),
 		PlayerUniqueID:			player.GetUniqueID(),

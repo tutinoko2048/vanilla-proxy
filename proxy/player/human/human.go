@@ -12,12 +12,16 @@ import (
 
 type Human interface {
 	GetName() string
+	GetUniqueID() int64
 	GetData() *data.PlayerData
 	GetSession() *session.Session
 
 	SendMessage(string)
 	SendPopup(string)
 	SendTip(string)
+	SendToast(title string, message string)
+	SetBossbar(title string, percentage float32, color uint32)
+	ClearBossbar()
 
 	Transfer(string, uint16)
 
