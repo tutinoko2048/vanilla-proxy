@@ -10,5 +10,8 @@
         "Respawn",
         "sandertv",
         "XUID"
+    ],
+    "git.branchProtection": [
+        "release"
     ]
 }
