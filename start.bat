@@ -1,5 +1,7 @@
 @echo off
 
+echo Building the project...
+
 :: Install the new packages
 go get -u all
 

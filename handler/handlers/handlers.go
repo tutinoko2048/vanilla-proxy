@@ -47,15 +47,15 @@ func registerHandlers() map[uint32][]handler.PacketHandler {
 
 	handlers[packet.IDSubChunk] = []handler.PacketHandler{SubChunkHandler{}}
 
-	if proxy.ProxyInstance.Worlds != nil {
-		handlers[packet.IDSubChunkRequest] = []handler.PacketHandler{SubChunkRequestHandler{}}
-		handlers[packet.IDSubChunk] = append(handlers[packet.IDSubChunk], SubChunkHandlerBoarder{})
-		handlers[packet.IDFullChunkData] = []handler.PacketHandler{LevelChunkHandler{}}
-		handlers[packet.IDInventoryTransaction] = []handler.PacketHandler{InventoryTransactionHandler{}}
-	}
+	// if proxy.ProxyInstance.Worlds != nil {
+	// 	handlers[packet.IDSubChunkRequest] = []handler.PacketHandler{SubChunkRequestHandler{}}
+	// 	handlers[packet.IDSubChunk] = append(handlers[packet.IDSubChunk], SubChunkHandlerBoarder{})
+	// 	handlers[packet.IDFullChunkData] = []handler.PacketHandler{LevelChunkHandler{}}
+	// 	handlers[packet.IDInventoryTransaction] = []handler.PacketHandler{InventoryTransactionHandler{}}
+	// }
 
 	// handlers[packet.IDModalFormResponse] = []handler.PacketHandler{ModalFormResponseHandler{}}
-	handlers[packet.IDPlayerAuthInput] = []handler.PacketHandler{PlayerInputHandler{}}
+	// handlers[packet.IDPlayerAuthInput] = []handler.PacketHandler{PlayerInputHandler{}}
 
 	handlers[packet.IDChunkRadiusUpdated] = []handler.PacketHandler{UpdateRadiusHandler{proxy.ProxyInstance.Config.Server.ViewDistance}}
 	handlers[packet.IDRequestChunkRadius] = []handler.PacketHandler{RequestRadiusHandler{proxy.ProxyInstance.Config.Server.ViewDistance}}

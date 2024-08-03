@@ -50,9 +50,9 @@ func New(config utils.Config) *Proxy {
 		PlayerListManager: playerListManager,
 	}
 
-	if config.WorldBorder.Enabled {
+	// if config.WorldBorder.Enabled {
 		Proxy.Worlds = world.Init(math.NewArea2(config.WorldBorder.MinX, config.WorldBorder.MinZ, config.WorldBorder.MaxX, config.WorldBorder.MaxZ))
-	}
+	// }
 
 	if config.Server.Whitelist {
 		Proxy.WhitelistManager = whitelist.Init(commandManager)
@@ -168,7 +168,7 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	player := player.GetPlayer(conn, serverConn)
 	log.Logger.Infoln(player.GetName(), "joined the server")
 	player.SendXUIDToAddon()
-	arg.UpdatePlayerDetails(player)
+	// arg.UpdatePlayerDetails(player)
 
 	go func() { // client->proxy
 		defer arg.DisconnectPlayer(player, "Connection closed")
