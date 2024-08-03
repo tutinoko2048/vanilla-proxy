@@ -52,6 +52,10 @@ func (player *Player) GetName() string {
 	return player.Name
 }
 
+func (player *Player) GetUniqueID() int64 {
+	return player.PlayerData.GameData.EntityUniqueID
+}
+
 func (player *Player) GetData() *data.PlayerData {
 	return player.PlayerData
 }
