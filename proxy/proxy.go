@@ -36,6 +36,7 @@ type Proxy struct {
 	Listener          *minecraft.Listener
 	WhitelistManager  *whitelist.WhitelistManager
 	PlayerListManager *playerlist.PlayerlistManager
+	PlayerManager			*player.PlayerManager
 }
 
 func New(config utils.Config) *Proxy {
@@ -44,6 +45,7 @@ func New(config utils.Config) *Proxy {
 	Proxy := &Proxy{
 		Config:            config,
 		PlayerListManager: playerListManager,
+		PlayerManager:		 player.NewPlayerManager(),
 	}
 
 	// if config.WorldBorder.Enabled {
@@ -168,6 +170,7 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 
 	player := player.GetPlayer(conn, serverConn)
 	log.Logger.Infoln(player.GetName(), "joined the server")
+	ProxyInstance.PlayerManager.AddPlayer(player)
 	player.SendXUIDToAddon()
 	// arg.UpdatePlayerDetails(player)
 
@@ -224,7 +227,7 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 }
 
 // DisconnectPlayer disconnects a player from the proxy.
-func (arg *Proxy) DisconnectPlayer(player human.Human, message string) {
+func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
 	// Send close container packet
 	openContainerId := player.GetData().OpenContainerWindowId
 	itemInContainers := player.GetData().ItemsInContainers
@@ -311,6 +314,7 @@ func (arg *Proxy) DisconnectPlayer(player human.Human, message string) {
 	// Disconnect
 	player.GetSession().Connection.ServerConn.Close()
 	arg.Listener.Disconnect(player.GetSession().Connection.ClientConn, message)
+	arg.PlayerManager.RemovePlayer(player)
 }
 
 type PlayerDetails struct {

@@ -5,7 +5,6 @@ import (
 
 	"github.com/HyPE-Network/vanilla-proxy/log"
 	"github.com/HyPE-Network/vanilla-proxy/proxy/player/data"
-	"github.com/HyPE-Network/vanilla-proxy/proxy/player/human"
 	"github.com/HyPE-Network/vanilla-proxy/proxy/session"
 	"github.com/HyPE-Network/vanilla-proxy/proxy/world"
 	"github.com/HyPE-Network/vanilla-proxy/utils"
@@ -41,11 +40,10 @@ func NewPlayer(conn *minecraft.Conn, session *session.Session) *Player {
 }
 
 // Gets a player from a connection
-func GetPlayer(conn *minecraft.Conn, serverConn *minecraft.Conn) human.Human {
+func GetPlayer(conn *minecraft.Conn, serverConn *minecraft.Conn) *Player {
 	ab := session.NewBridge(conn, serverConn)
 	newSession := session.NewSession(conn, ab)
-	var pl human.Human = NewPlayer(conn, newSession)
-	return pl
+	return NewPlayer(conn, newSession)
 }
 
 func (player *Player) GetName() string {
