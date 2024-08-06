@@ -8,6 +8,7 @@ import (
 	"github.com/HyPE-Network/vanilla-proxy/proxy"
 	"github.com/HyPE-Network/vanilla-proxy/utils"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+	"github.com/HyPE-Network/vanilla-proxy/api"
 )
 
 func main() {
@@ -18,11 +19,19 @@ func main() {
 
 	proxy.ProxyInstance = proxy.New(config)
 
-	err := proxy.ProxyInstance.Start(loadHandlers())
-	if err != nil {
-		log.Logger.Errorln("Error while starting server: ", err)
-		panic(err)
-	}
+	go func() {
+		api.Init(proxy.ProxyInstance)
+	}()
+
+	go func() {
+		err := proxy.ProxyInstance.Start(loadHandlers())
+		if err != nil {
+			log.Logger.Errorln("Error while starting server: ", err)
+			panic(err)
+		}
+	}()
+
+	select {}
 }
 
 func loadHandlers() handler.HandlerManager {

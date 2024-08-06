@@ -1,5 +1,9 @@
 package player
 
+import (
+	"strconv"
+)
+
 type PlayerManager struct {
 	// [uuid]: Player
 	Players map[string]*Player
@@ -40,6 +44,21 @@ func (manager *PlayerManager) GetPlayerByXUID(xuid string) *Player {
 		}
 	}
 	return nil
+}
+
+func (manager *PlayerManager) GetPlayerByUniqueID(name string) (*Player, error) {
+	uniqueID, err := strconv.ParseInt(name, 10, 64)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, player := range manager.Players {
+		if player.GetUniqueID() == uniqueID {
+			return player, nil
+		}
+	}
+	return nil, nil
 }
 
 func (manager *PlayerManager) GetPlayerCount() int {
