@@ -56,6 +56,14 @@ func (player *Player) GetUniqueID() int64 {
 	return player.PlayerData.GameData.EntityUniqueID
 }
 
+func (player *Player) GetXUID() string {
+	return player.Session.IdentityData.XUID
+}
+
+func (player *Player) GetUUID() string {
+	return player.Session.IdentityData.Identity
+}
+
 func (player *Player) GetData() *data.PlayerData {
 	return player.PlayerData
 }
