@@ -1,6 +1,7 @@
 package player
 
 import (
+	"errors"
 	"strconv"
 )
 
@@ -46,8 +47,8 @@ func (manager *PlayerManager) GetPlayerByXUID(xuid string) *Player {
 	return nil
 }
 
-func (manager *PlayerManager) GetPlayerByUniqueID(name string) (*Player, error) {
-	uniqueID, err := strconv.ParseInt(name, 10, 64)
+func (manager *PlayerManager) GetPlayerByUniqueID(id string) (*Player, error) {
+	uniqueID, err := strconv.ParseInt(id, 10, 64)
 
 	if err != nil {
 		return nil, err
@@ -58,7 +59,7 @@ func (manager *PlayerManager) GetPlayerByUniqueID(name string) (*Player, error) 
 			return player, nil
 		}
 	}
-	return nil, nil
+	return nil, errors.New("Player not found")
 }
 
 func (manager *PlayerManager) GetPlayerCount() int {
