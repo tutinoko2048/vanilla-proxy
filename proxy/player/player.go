@@ -62,6 +62,10 @@ func (player *Player) GetUUID() string {
 	return player.Session.IdentityData.Identity
 }
 
+func (player *Player) GetDeviceID() string {
+	return player.Session.ClientData.DeviceID
+}
+
 func (player *Player) GetData() *data.PlayerData {
 	return player.PlayerData
 }
