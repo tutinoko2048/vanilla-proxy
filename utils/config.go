@@ -34,7 +34,6 @@ type Config struct {
 	}
 	Database struct {
 		Host string
-		Port int
 		Key  string
 		Name string
 	}
@@ -98,13 +97,13 @@ func ReadConfig() Config {
 		panic("ViewDistance must be a value greater than 0!")
 	}
 
-	// if c.Database.Host == "" {
-	// 	panic("Database Host must be a valid address!")
-	// }
+	if c.Rcon.Enabled && (c.Rcon.Port == 0 || c.Rcon.Password == "") {
+		panic("Rcon is enabled and not configured in config!")
+	}
 
-	// if c.Database.Port == 0 {
-	// 	panic("Database Port must be a valid port number!")
-	// }
+	if c.Database.Host == "" {
+		panic("Database Host must be a valid address!")
+	}
 
 	// if c.Api.ApiHost == "" {
 	// 	panic("API Host must be a valid address!")

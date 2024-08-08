@@ -18,10 +18,10 @@ jobs:
         with:
           go-version: "1.22.4"
 
-      - name: Build [Windows]
-        run: GOOS=windows GOARCH=amd64 go build -o vanilla-proxy-windows.exe .
+      - name: Build Windows executable
+        run: GOOS=windows GOARCH=amd64 go build -o vanilla-proxy-win.exe .
 
-      - name: Build [Linux]
+      - name: Build Linux executable
         run: GOOS=linux GOARCH=amd64 go build -o vanilla-proxy-linux .
 
       - name: Create Release
@@ -35,17 +35,17 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Asset [Windows]
+      - name: Upload Windows Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./vanilla-proxy-windows.exe
-          asset_name: vanilla-proxy-windows.exe
+          asset_path: ./vanilla-proxy-win.exe
+          asset_name: vanilla-proxy-win.exe
           asset_content_type: application/octet-stream
 
-      - name: Upload Release Asset [Linux]
+      - name: Upload Linux Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
