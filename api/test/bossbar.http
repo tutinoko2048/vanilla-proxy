@@ -1,0 +1,13 @@
+POST http://localhost:8080
+
+{
+  "type": "player",
+  "action": "sendBossbar",
+  "args": {
+    "uniqueId": "-176093659128",
+    "title": "this is title",
+    "percentage": 0.8,
+    "color": 2
+  }
+}
+
