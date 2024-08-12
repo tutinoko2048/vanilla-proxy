@@ -99,10 +99,6 @@ func ReadConfig() Config {
 		panic("ViewDistance must be a value greater than 0!")
 	}
 
-	if c.Rcon.Enabled && (c.Rcon.Port == 0 || c.Rcon.Password == "") {
-		panic("Rcon is enabled and not configured in config!")
-	}
-
 	if c.Database.Host == "" {
 		panic("Database Host must be a valid address!")
 	}
