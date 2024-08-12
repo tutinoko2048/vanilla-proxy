@@ -99,9 +99,9 @@ func ReadConfig() Config {
 		panic("ViewDistance must be a value greater than 0!")
 	}
 
-	if c.Database.Host == "" {
-		panic("Database Host must be a valid address!")
-	}
+	// if c.Database.Host == "" {
+	// 	panic("Database Host must be a valid address!")
+	// }
 
 	// if c.Api.ApiHost == "" {
 	// 	panic("API Host must be a valid address!")

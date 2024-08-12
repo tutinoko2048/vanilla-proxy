@@ -23,13 +23,13 @@ func main() {
 		api.Init(proxy.ProxyInstance)
 	}()
 
-	go func() {
-		err := proxy.ProxyInstance.Start(loadHandlers())
-		if err != nil {
-			log.Logger.Errorln("Error while starting server: ", err)
-			panic(err)
-		}
-	}()
+	
+	err := proxy.ProxyInstance.Start(loadHandlers())
+	if err != nil {
+		log.Logger.Errorln("Error while starting server: ", err)
+		panic(err)
+	}
+
 
 	select {}
 }
