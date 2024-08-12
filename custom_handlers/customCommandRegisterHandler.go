@@ -2,10 +2,10 @@ package custom_handlers
 
 import (
 	"encoding/json"
-	"log"
 	"math"
 	"strings"
 
+	"github.com/HyPE-Network/vanilla-proxy/log"
 	"github.com/HyPE-Network/vanilla-proxy/proxy"
 	"github.com/HyPE-Network/vanilla-proxy/proxy/command"
 	"github.com/HyPE-Network/vanilla-proxy/proxy/player/human"
@@ -156,7 +156,7 @@ func formatAvailableCommands(commands map[string]IEngineResponseCommand) packet.
 	}
 	pk.DynamicEnums = make([]protocol.DynamicEnum, 0, len(dynamicEnums))
 	for _, e := range dynamicEnums {
-		pk.DynamicEnums = append(pk.DynamicEnums, protocol.DynamicEnum{Type: e.Type, Values: e.Options})
+		pk.DynamicEnums = append(pk.DynamicEnums, protocol.DynamicEnum{Type: strings.ToLower(e.Type), Values: e.Options})
 	}
 
 	enumValueIndices := make(map[string]uint32, len(enums)*3)
@@ -191,7 +191,7 @@ func (CustomCommandRegisterHandler) Handle(pk packet.Packet, player human.Human)
 	// Parse the raw message
 	var messageData IMinecraftTextMessage
 	if err := json.Unmarshal([]byte(dataPacket.Message), &messageData); err != nil {
-		log.Println("Failed to parse message JSON:", err)
+		log.Logger.Println("Failed to parse message JSON:", err)
 		return false, dataPacket, err
 	}
 
@@ -209,7 +209,7 @@ func (CustomCommandRegisterHandler) Handle(pk packet.Packet, player human.Human)
 
 	err := json.Unmarshal([]byte(commandsRaw), &commands)
 	if err != nil {
-		log.Println("Failed to unmarshal commands:", err)
+		log.Logger.Println("Failed to unmarshal commands:", err)
 		return false, dataPacket, err
 	}
 

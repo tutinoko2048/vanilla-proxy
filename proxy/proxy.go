@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"net"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -21,6 +21,7 @@ import (
 	"github.com/HyPE-Network/vanilla-proxy/utils"
 	"github.com/google/uuid"
 
+	"github.com/sandertv/go-raknet"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	"github.com/sandertv/gophertunnel/minecraft/resource"
@@ -41,11 +42,15 @@ type Proxy struct {
 }
 
 func New(config utils.Config) *Proxy {
-	playerListManager := playerlist.Init()
+	playerListManager, err := playerlist.Init()
+	if err != nil {
+		log.Logger.Fatalln("Error in initializing playerListManager: ", err)
+	}
 
 	Proxy := &Proxy{
 		Config:            config,
 		PlayerListManager: playerListManager,
+		WhitelistManager:  whitelist.Init(),
 		PlayerManager:		 player.NewPlayerManager(),
 	}
 
@@ -64,6 +69,17 @@ func New(config utils.Config) *Proxy {
 func (arg *Proxy) Start(h handler.HandlerManager) error {
 	arg.Handlers = h
 
+	res, err := raknet.Ping(arg.Config.Connection.RemoteAddress)
+	if err != nil {
+		// Server prob not online, retrying
+		log.Logger.Errorln("Failed to ping server, retrying in 5 seconds:", err)
+		time.Sleep(time.Second * 5)
+		arg.Start(h)
+		return nil
+	}
+	// Server is online, parse data
+	status := minecraft.ParsePongData(res)
+	log.Logger.Infoln("Server", status.ServerName, "is online with MOTD", status.ServerSubName)
 	p, err := minecraft.NewForeignStatusProvider(arg.Config.Connection.RemoteAddress)
 	if err != nil {
 		return err
@@ -75,6 +91,15 @@ func (arg *Proxy) Start(h handler.HandlerManager) error {
 	// Loop through all the pack URLs and append each pack to the slice
 	for _, url := range arg.Config.Resources.PackURLs {
 		resourcePack, err := resource.ReadURL(url)
+		if err != nil {
+			return err
+		}
+		resourcePacks = append(resourcePacks, resourcePack)
+	}
+
+	// Loop through all the pack paths and append each pack to the slice
+	for _, path := range arg.Config.Resources.PackPaths {
+		resourcePack, err := resource.ReadPath(path)
 		if err != nil {
 			return err
 		}
@@ -99,7 +124,15 @@ func (arg *Proxy) Start(h handler.HandlerManager) error {
 	for {
 		c, err := arg.Listener.Accept()
 		if err != nil {
+			// The listener closed, so we should restart it.
 			log.Logger.Errorln(err)
+			utils.SendStaffAlertToDiscord("Proxy Listener Closed", err.Error(), 16711680, []map[string]interface{}{
+				{
+					"name":   "Connection From",
+					"value":  c.RemoteAddr().String(),
+					"inline": true,
+				},
+			})
 			c.Close()
 			arg.Start(h)
 			return nil // Should return error, but we want to restart listener
@@ -111,31 +144,58 @@ func (arg *Proxy) Start(h handler.HandlerManager) error {
 
 // handleConn handles a new incoming minecraft.Conn from the minecraft.Listener passed.
 func (arg *Proxy) handleConn(conn *minecraft.Conn) {
+	playerWhitelisted := arg.WhitelistManager.HasPlayer(conn.IdentityData().DisplayName, conn.IdentityData().XUID)
 	if arg.Config.Server.Whitelist {
-		if !arg.WhitelistManager.HasPlayer(conn.IdentityData().DisplayName, conn.IdentityData().XUID) {
+		if !playerWhitelisted {
 			arg.Listener.Disconnect(conn, "You are not whitelisted on this server!")
 			return
 		}
 	}
 
-	clientData := arg.PlayerListManager.GetConnClientData(conn)
-	identityData := arg.PlayerListManager.GetConnIdentityData(conn)
+	res, err := raknet.Ping(arg.Config.Connection.RemoteAddress)
+	if err != nil {
+		// Server just went offline while player was connecting
+		arg.Listener.Disconnect(conn, "Server just went offline, please try again later!")
+		return
+	}
+	// Server is online, fetch data
+	status := minecraft.ParsePongData(res)
+	if status.PlayerCount >= status.MaxPlayers-arg.Config.Server.SecuredSlots {
+		if playerWhitelisted && status.PlayerCount >= status.MaxPlayers {
+			// Player is whitelisted, but all secured slots are taken too, so we can't let them in
+			arg.Listener.Disconnect(conn, fmt.Sprintf("Sorry %s, even though you have priority access, all secured slots are taken! (%d/%d)", conn.IdentityData().DisplayName, status.PlayerCount, status.MaxPlayers))
+			return
+		} else if !playerWhitelisted {
+			arg.Listener.Disconnect(conn, fmt.Sprintf("Server is full, please try again later! (%d/%d)", status.PlayerCount, status.MaxPlayers))
+			return
+		}
+		// Player is whitelisted and there are secured slots available, let them in
+	}
+
+	clientData, err := arg.PlayerListManager.GetConnClientData(conn)
+	if err != nil {
+		log.Logger.Errorln("Error in getting clientData: ", err)
+		arg.Listener.Disconnect(conn, strings.Split(err.Error(), ": ")[1])
+		return
+	}
+	identityData, err := arg.PlayerListManager.GetConnIdentityData(conn)
+	if err != nil {
+		log.Logger.Errorln("Error in getting identityData: ", err)
+		arg.Listener.Disconnect(conn, strings.Split(err.Error(), ": ")[1])
+		return
+	}
 
 	serverConn, err := minecraft.Dialer{
 		KeepXBLIdentityData: true,
 		ClientData:          clientData,
 		IdentityData:        identityData,
-		PacketFunc: func(header packet.Header, payload []byte, src, dst net.Addr) {
-			log.Logger.Debugln("Packet from", header.PacketID)
-		},
 		DownloadResourcePack: func(id uuid.UUID, version string, current int, total int) bool {
 			return false
 		},
 	}.DialTimeout("raknet", arg.Config.Connection.RemoteAddress, time.Second*120)
 
 	if err != nil {
-		log.Logger.Errorln("Error in establishing serverConn: ", err)
-		arg.Listener.Disconnect(conn, "Failed to establish a connection")
+		arg.Listener.Disconnect(conn, strings.Split(err.Error(), ": ")[1])
 		return
 	}
 
@@ -179,10 +239,15 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	// arg.UpdatePlayerDetails(player)
 
 	go func() { // client->proxy
-		defer arg.DisconnectPlayer(player, "Connection closed")
+		defer arg.DisconnectPlayer(player, "Client Connection closed")
 		for {
 			pk, err := conn.ReadPacket()
 			if err != nil {
+				var disc minecraft.DisconnectError
+				if ok := errors.As(err, &disc); !ok {
+					// Error is not a disconnect error, so log the error.
+					log.Logger.Errorln("Failed to read Packet from Client", err)
+				}
 				return
 			}
 
@@ -204,7 +269,7 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 		}
 	}()
 	go func() { // proxy->server
-		defer arg.DisconnectPlayer(player, "Connection closed")
+		defer arg.DisconnectPlayer(player, "Server Connection closed")
 		for {
 			pk, err := serverConn.ReadPacket()
 			if err != nil {
@@ -233,32 +298,36 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 // DisconnectPlayer disconnects a player from the proxy.
 func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
 	// Send close container packet
+	if player.IsBeingDisconnected() {
+		return // Player is already being disconnected, ignore this call
+	}
+	player.SetDisconnected(true)
+
 	openContainerId := player.GetData().OpenContainerWindowId
 	itemInContainers := player.GetData().ItemsInContainers
+	playerLastLocation := player.GetData().LastUpdatedLocation
+	lastLocationString := fmt.Sprintf("[%d, %d, %d]", int(playerLastLocation.X()), int(playerLastLocation.Y()), int(playerLastLocation.Z()))
 
-	if openContainerId != 0 {
-		log.Logger.Println("Player has open container while disconnecting, *prob trying to dupe*")
+	if openContainerId != 0 && len(itemInContainers) > 0 {
+		log.Logger.Println(player.GetName(), "has open container:", openContainerId, "while disconnecting, *prob trying to dupe*", lastLocationString)
 
-		utils.SendStaffAlertToDiscord("Disconnecting With Open Container",
-			"A Player Has disconnected with an open container, please investigate!",
-			16711680,
-			[]map[string]interface{}{
-				{
-					"name":   "Player Name",
-					"value":  player.GetName(),
-					"inline": true,
-				},
-				{
-					"name":   "Container Type",
-					"value":  openContainerId,
-					"inline": true,
-				},
-				{
-					"name":   "Player Location",
-					"value":  player.GetData().LastUpdatedLocation,
-					"inline": true,
-				},
-			})
+		utils.SendStaffAlertToDiscord("Disconnect with open container!", "A Player Has disconnected with an open container, please investigate!", 16711680, []map[string]interface{}{
+			{
+				"name":   "Player Name",
+				"value":  "```" + player.GetName() + "```",
+				"inline": true,
+			},
+			{
+				"name":   "Player Location",
+				"value":  "```" + lastLocationString + "```",
+				"inline": true,
+			},
+			{
+				"name":   "Item Count",
+				"value":  "```" + fmt.Sprintf("%d", len(itemInContainers)) + "```",
+				"inline": true,
+			},
+		})
 
 		// Send Item Stack Requests to clear the container
 		// Send Item Request to clear container id 13 (crafting table)
@@ -291,27 +360,23 @@ func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
 	cursorItem := player.GetItemFromContainerSlot(protocol.ContainerCombinedHotBarAndInventory, 0)
 	if cursorItem.StackNetworkID != 0 {
 		// Player left with a item in ContainerCombinedHotBarAndInventory
-		utils.SendStaffAlertToDiscord("Disconnecting With Item",
-			"A Player Has disconnected with a item in ContainerCombinedHotBarAndInventory, please investigate!",
-			16711680,
-			[]map[string]interface{}{
-				{
-					"name":   "Player Name",
-					"value":  player.GetName(),
-					"inline": true,
-				},
-				{
-					"name":   "Stack Network ID",
-					"value":  cursorItem.StackNetworkID,
-					"inline": true,
-				},
-				{
-					"name":   "Player Location",
-					"value":  player.GetData().LastUpdatedLocation,
-					"inline": true,
-				},
-			})
-
+		utils.SendStaffAlertToDiscord("Disconnecting With Item", "A Player Has disconnected with a item in ContainerCombinedHotBarAndInventory, please investigate!", 16711680, []map[string]interface{}{
+			{
+				"name":   "Player Name",
+				"value":  "```" + player.GetName() + "```",
+				"inline": true,
+			},
+			{
+				"name":   "Stack Network ID",
+				"value":  "```" + fmt.Sprintf("%d", cursorItem.StackNetworkID) + "```",
+				"inline": true,
+			},
+			{
+				"name":   "Player Location",
+				"value":  "```" + lastLocationString + "```",
+				"inline": true,
+			},
+		})
 	}
 	log.Logger.Debugln("Disconnecting player:", player.GetName(), "with reason:", message)
 
