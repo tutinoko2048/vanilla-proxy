@@ -58,10 +58,6 @@ func New(config utils.Config) *Proxy {
 		Proxy.Worlds = world.Init(math.NewArea2(config.WorldBorder.MinX, config.WorldBorder.MinZ, config.WorldBorder.MaxX, config.WorldBorder.MaxZ))
 	// }
 
-	if config.Server.Whitelist {
-		Proxy.WhitelistManager = whitelist.Init()
-	}
-
 	return Proxy
 }
 
@@ -210,7 +206,7 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	player := player.GetPlayer(conn, serverConn)
 	log.Logger.Infoln(player.GetName(), "joined the server")
 	player.SendXUIDToAddon()
-	arg.UpdatePlayerDetails(player)
+	// arg.UpdatePlayerDetails(player)
 
 	arg.startPacketHandlers(player, conn, serverConn)
 }
@@ -272,12 +268,15 @@ func (arg *Proxy) initializeConnection(conn *minecraft.Conn, serverConn *minecra
 		serverConn.Close()
 		return false
 	}
+	return true
+}
 
-	player := player.GetPlayer(conn, serverConn)
-	log.Logger.Infoln(player.GetName(), "joined the server")
-	player.SendXUIDToAddon()
-	ProxyInstance.PlayerManager.AddPlayer(player)
-	arg.UpdatePlayerDetails(player)
+func (arg *Proxy) startPacketHandlers(player human.Human, conn *minecraft.Conn, serverConn *minecraft.Conn) {
+	// player := player.GetPlayer(conn, serverConn)
+	// log.Logger.Infoln(player.GetName(), "joined the server")
+	// player.SendXUIDToAddon()
+	// ProxyInstance.PlayerManager.AddPlayer(player)
+	// arg.UpdatePlayerDetails(player)
 
 	go func() { // client->proxy
 		defer func() {
@@ -362,25 +361,25 @@ func (arg *Proxy) handlePacketError(err error, player human.Human, msg string) b
 }
 
 // DisconnectPlayer disconnects a player from the proxy.
-func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
+func (arg *Proxy) DisconnectPlayer(pl human.Human, message string) {
 	// Send close container packet
-	if player.IsBeingDisconnected() {
+	if pl.IsBeingDisconnected() {
 		return // Player is already being disconnected, ignore this call
 	}
-	player.SetDisconnected(true)
+	pl.SetDisconnected(true)
 
-	openContainerId := player.GetData().OpenContainerWindowId
-	itemInContainers := player.GetData().ItemsInContainers
-	playerLastLocation := player.GetData().LastUpdatedLocation
+	openContainerId := pl.GetData().OpenContainerWindowId
+	itemInContainers := pl.GetData().ItemsInContainers
+	playerLastLocation := pl.GetData().LastUpdatedLocation
 	lastLocationString := fmt.Sprintf("[%d, %d, %d]", int(playerLastLocation.X()), int(playerLastLocation.Y()), int(playerLastLocation.Z()))
 
 	if openContainerId != 0 && len(itemInContainers) > 0 {
-		log.Logger.Println(player.GetName(), "has open container:", openContainerId, "while disconnecting, *prob trying to dupe*", lastLocationString)
+		log.Logger.Println(pl.GetName(), "has open container:", openContainerId, "while disconnecting, *prob trying to dupe*", lastLocationString)
 
 		utils.SendStaffAlertToDiscord("Disconnect with open container!", "A Player Has disconnected with an open container, please investigate!", 16711680, []map[string]interface{}{
 			{
 				"name":   "Player Name",
-				"value":  "```" + player.GetName() + "```",
+				"value":  "```" + pl.GetName() + "```",
 				"inline": true,
 			},
 			{
@@ -399,7 +398,7 @@ func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
 		// Send Item Request to clear container id 13 (crafting table)
 		// By sending from slot 32->40 (9 crafting slots) to `false` (throw on ground)
 		request := protocol.ItemStackRequest{
-			RequestID: player.GetNextItemStackRequestID(),
+			RequestID: pl.GetNextItemStackRequestID(),
 			Actions:   []protocol.StackRequestAction{},
 		}
 		// Loop through players container slots
@@ -414,22 +413,22 @@ func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
 			Requests: []protocol.ItemStackRequest{request},
 		}
 		log.Logger.Debugln("Sending ItemStackRequest to clear container:")
-		player.DataPacketToServer(pk)
+		pl.DataPacketToServer(pk)
 
-		player.SetOpenContainerWindowID(0)
-		player.SetOpenContainerType(0)
+		pl.SetOpenContainerWindowID(0)
+		pl.SetOpenContainerType(0)
 
 		// Sleep for 2 seconds to allow the packets to be sent
 		time.Sleep(time.Second * 4)
 	}
 
-	cursorItem := player.GetItemFromContainerSlot(protocol.ContainerCombinedHotBarAndInventory, 0)
+	cursorItem := pl.GetItemFromContainerSlot(protocol.ContainerCombinedHotBarAndInventory, 0)
 	if cursorItem.StackNetworkID != 0 {
 		// Player left with a item in ContainerCombinedHotBarAndInventory
 		utils.SendStaffAlertToDiscord("Disconnecting With Item", "A Player Has disconnected with a item in ContainerCombinedHotBarAndInventory, please investigate!", 16711680, []map[string]interface{}{
 			{
 				"name":   "Player Name",
-				"value":  "```" + player.GetName() + "```",
+				"value":  "```" + pl.GetName() + "```",
 				"inline": true,
 			},
 			{
@@ -444,12 +443,12 @@ func (arg *Proxy) DisconnectPlayer(player *player.Player, message string) {
 			},
 		})
 	}
-	log.Logger.Debugln("Disconnecting player:", player.GetName(), "with reason:", message)
+	log.Logger.Debugln("Disconnecting player:", pl.GetName(), "with reason:", message)
 
 	// Disconnect
-	player.GetSession().Connection.ServerConn.Close()
-	arg.Listener.Disconnect(player.GetSession().Connection.ClientConn, message)
-	arg.PlayerManager.RemovePlayer(player)
+	pl.GetSession().Connection.ServerConn.Close()
+	arg.Listener.Disconnect(pl.GetSession().Connection.ClientConn, message)
+	arg.PlayerManager.RemovePlayer(pl.(*player.Player))
 }
 
 type PlayerDetails struct {
