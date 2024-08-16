@@ -4,11 +4,13 @@
         "Errorln",
         "gophertunnel",
         "Infoln",
+        "logrus",
         "playerlist",
         "pokeb",
         "raknet",
         "Respawn",
         "sandertv",
+        "Warnln",
         "XUID"
     ],
     "git.branchProtection": [

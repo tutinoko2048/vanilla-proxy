@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/sandertv/go-raknet v1.14.1
-	github.com/sandertv/gophertunnel v1.39.3
+	github.com/sandertv/gophertunnel v1.40.0
 	github.com/sirupsen/logrus v1.9.3
 )
 
@@ -31,4 +31,4 @@ require (
 
 replace github.com/sandertv/go-raknet => github.com/hashimthearab/go-raknet v1.14.2-0.20240712204703-9b99c862e9db
 
-replace github.com/sandertv/gophertunnel => github.com/smell-of-curry/gophertunnel v1.39.1-0.20240810191223-3534e6bcacac
+replace github.com/sandertv/gophertunnel => github.com/smell-of-curry/gophertunnel v1.39.1-0.20240814134519-b26035ccfa64

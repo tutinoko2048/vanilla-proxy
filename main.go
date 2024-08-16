@@ -26,8 +26,7 @@ func main() {
 	
 	err := proxy.ProxyInstance.Start(loadHandlers())
 	if err != nil {
-		log.Logger.Errorln("Error while starting server: ", err)
-		panic(err)
+		log.Logger.Panicln("Error while starting server: ", err)
 	}
 
 

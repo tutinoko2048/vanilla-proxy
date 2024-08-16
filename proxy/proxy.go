@@ -67,12 +67,10 @@ func New(config utils.Config) *Proxy {
 
 // The following program implements a proxy that forwards players from one local address to a remote address.
 func (arg *Proxy) Start(h handler.HandlerManager) error {
-	arg.Handlers = h
-
 	res, err := raknet.Ping(arg.Config.Connection.RemoteAddress)
 	if err != nil {
 		// Server prob not online, retrying
-		log.Logger.Errorln("Failed to ping server, retrying in 5 seconds:", err)
+		log.Logger.Warnln("Failed to ping server, retrying in 5 seconds:", err)
 		time.Sleep(time.Second * 5)
 		arg.Start(h)
 		return nil
@@ -92,6 +90,7 @@ func (arg *Proxy) Start(h handler.HandlerManager) error {
 	for _, url := range arg.Config.Resources.PackURLs {
 		resourcePack, err := resource.ReadURL(url)
 		if err != nil {
+			log.Logger.Warnln("Failed to read resource pack from URL:", url, err)
 			return err
 		}
 		resourcePacks = append(resourcePacks, resourcePack)
@@ -101,6 +100,7 @@ func (arg *Proxy) Start(h handler.HandlerManager) error {
 	for _, path := range arg.Config.Resources.PackPaths {
 		resourcePack, err := resource.ReadPath(path)
 		if err != nil {
+			log.Logger.Warnln("Failed to read resource pack from path:", path, err)
 			return err
 		}
 		resourcePacks = append(resourcePacks, resourcePack)
@@ -111,39 +111,48 @@ func (arg *Proxy) Start(h handler.HandlerManager) error {
 		StatusProvider:         p,
 		ResourcePacks:          resourcePacks,
 		TexturePacksRequired:   true,
+		ErrorLog:               log.Logger,
+		Compression:            packet.FlateCompression,
 	}.Listen("raknet", arg.Config.Connection.ProxyAddress)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start listener: %w", err)
 	}
 
 	log.Logger.Debugln("Original server address:", arg.Config.Connection.RemoteAddress, "public address:", arg.Config.Connection.ProxyAddress)
 	log.Logger.Println("Proxy has been started on Version", protocol.CurrentVersion, "protocol", protocol.CurrentProtocol)
+	arg.Handlers = h
 
-	defer arg.Listener.Close()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Logger.Errorf("Recovered from panic in Handling Listener: %v", r)
+		}
+		log.Logger.Errorf("Closing listener: %v", arg.Listener.Close())
+	}()
 	for {
 		c, err := arg.Listener.Accept()
 		if err != nil {
-			// The listener closed, so we should restart it.
-			log.Logger.Errorln(err)
-			utils.SendStaffAlertToDiscord("Proxy Listener Closed", err.Error(), 16711680, []map[string]interface{}{
-				{
-					"name":   "Connection From",
-					"value":  c.RemoteAddr().String(),
-					"inline": true,
-				},
-			})
-			c.Close()
-			arg.Start(h)
-			return nil // Should return error, but we want to restart listener
+			// The listener closed, so we should restart it. c==nil
+			log.Logger.Errorf("Listener accept error: %v", err)
+			utils.SendStaffAlertToDiscord("Proxy Listener Closed", "```"+err.Error()+"```", 16711680, []map[string]interface{}{})
+
+			time.Sleep(time.Second * 5) // Wait 5 seconds before restarting the listener
+			return arg.Start(h)
 		}
-		log.Logger.Debugln("New connection from", c.(*minecraft.Conn).RemoteAddr())
+		log.Logger.Debugln("New connection from", c.RemoteAddr())
 		go arg.handleConn(c.(*minecraft.Conn))
 	}
 }
 
 // handleConn handles a new incoming minecraft.Conn from the minecraft.Listener passed.
 func (arg *Proxy) handleConn(conn *minecraft.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Logger.Errorf("Recovered from panic in handleConn: %v", r)
+			arg.Listener.Disconnect(conn, "An internal error occurred")
+		}
+	}()
+
 	playerWhitelisted := arg.WhitelistManager.HasPlayer(conn.IdentityData().DisplayName, conn.IdentityData().XUID)
 	if arg.Config.Server.Whitelist {
 		if !playerWhitelisted {
@@ -160,16 +169,8 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	}
 	// Server is online, fetch data
 	status := minecraft.ParsePongData(res)
-	if status.PlayerCount >= status.MaxPlayers-arg.Config.Server.SecuredSlots {
-		if playerWhitelisted && status.PlayerCount >= status.MaxPlayers {
-			// Player is whitelisted, but all secured slots are taken too, so we can't let them in
-			arg.Listener.Disconnect(conn, fmt.Sprintf("Sorry %s, even though you have priority access, all secured slots are taken! (%d/%d)", conn.IdentityData().DisplayName, status.PlayerCount, status.MaxPlayers))
-			return
-		} else if !playerWhitelisted {
-			arg.Listener.Disconnect(conn, fmt.Sprintf("Server is full, please try again later! (%d/%d)", status.PlayerCount, status.MaxPlayers))
-			return
-		}
-		// Player is whitelisted and there are secured slots available, let them in
+	if !arg.canJoinServer(status, conn, playerWhitelisted) {
+		return
 	}
 
 	clientData, err := arg.PlayerListManager.GetConnClientData(conn)
@@ -192,7 +193,8 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 		DownloadResourcePack: func(id uuid.UUID, version string, current int, total int) bool {
 			return false
 		},
-	}.DialTimeout("raknet", arg.Config.Connection.RemoteAddress, time.Second*120)
+		ErrorLog: log.Logger,
+	}.DialTimeout("raknet", arg.Config.Connection.RemoteAddress, time.Second*30)
 
 	if err != nil {
 		arg.Listener.Disconnect(conn, strings.Split(err.Error(), ": ")[1])
@@ -201,6 +203,45 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 
 	log.Logger.Debugln("Server connection established for", serverConn.IdentityData().DisplayName)
 
+	if !arg.initializeConnection(conn, serverConn) {
+		return
+	}
+
+	player := player.GetPlayer(conn, serverConn)
+	log.Logger.Infoln(player.GetName(), "joined the server")
+	player.SendXUIDToAddon()
+	arg.UpdatePlayerDetails(player)
+
+	arg.startPacketHandlers(player, conn, serverConn)
+}
+
+// canJoinServer checks if a player can join the server based on its status.
+// It returns true if the player can join, and false if the player can't join.
+// If false, the player will be disconnected with a message.
+func (arg *Proxy) canJoinServer(status minecraft.ServerStatus, conn *minecraft.Conn, whitelisted bool) bool {
+	if status.PlayerCount >= status.MaxPlayers-arg.Config.Server.SecuredSlots {
+		if whitelisted && status.PlayerCount >= status.MaxPlayers {
+			// Player is whitelisted, but all secured slots are taken too, so we can't let them in
+			arg.Listener.Disconnect(conn, fmt.Sprintf("Sorry %s, even though you have priority access, all secured slots are taken! (%d/%d)", conn.IdentityData().DisplayName, status.PlayerCount, status.MaxPlayers))
+			return false
+		} else if !whitelisted && status.PlayerCount < status.MaxPlayers {
+			// Player is not whitelisted, but the server is full to non whitelisted players.
+			arg.Listener.Disconnect(conn, fmt.Sprintf("Sorry %s, even though the server is not full, the remaining slots are reserved for our staff! (%d/%d)", conn.IdentityData().DisplayName, status.PlayerCount, status.MaxPlayers))
+			return false
+		} else if !whitelisted {
+			// Player is not whitelisted and the server is completely full.
+			arg.Listener.Disconnect(conn, fmt.Sprintf("Sorry %s, the server is full, please try again later! (%d/%d)", conn.IdentityData().DisplayName, status.PlayerCount, status.MaxPlayers))
+			return false
+		}
+		// Player is whitelisted and there are secured slots available, let them in
+	}
+	return true
+}
+
+// initializeConnection handles the initial setup for a new connection.
+// It returns true if the connection was successfully established, and false if it wasn't.
+// If false, the player will be disconnected with a message.
+func (arg *Proxy) initializeConnection(conn *minecraft.Conn, serverConn *minecraft.Conn) bool {
 	gameData := serverConn.GameData()
 	gameData.WorldSeed = 0
 	gameData.ClientSideGeneration = false
@@ -212,14 +253,14 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	g.Add(2)
 	go func() {
 		if err := conn.StartGame(gameData); err != nil {
-			log.Logger.Errorln(err)
+			log.Logger.Errorln("Failed to start game on client:", err)
 			success = false
 		}
 		g.Done()
 	}()
 	go func() {
 		if err := serverConn.DoSpawn(); err != nil {
-			log.Logger.Errorln(err)
+			log.Logger.Errorln("Failed to spawn on server:", err)
 			success = false
 		}
 		g.Done()
@@ -229,56 +270,63 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	if !success {
 		arg.Listener.Disconnect(conn, "Failed to establish a connection, please try again!")
 		serverConn.Close()
-		return
+		return false
 	}
 
 	player := player.GetPlayer(conn, serverConn)
 	log.Logger.Infoln(player.GetName(), "joined the server")
-	ProxyInstance.PlayerManager.AddPlayer(player)
 	player.SendXUIDToAddon()
-	// arg.UpdatePlayerDetails(player)
+	ProxyInstance.PlayerManager.AddPlayer(player)
+	arg.UpdatePlayerDetails(player)
 
 	go func() { // client->proxy
-		defer arg.DisconnectPlayer(player, "Client Connection closed")
+		defer func() {
+			if r := recover(); r != nil {
+				log.Logger.Errorf("Recovered from panic in HandlePacket from Client: %v", r)
+				arg.DisconnectPlayer(player, "An internal error occurred")
+			}
+			arg.DisconnectPlayer(player, "Client Connection closed")
+		}()
 		for {
 			pk, err := conn.ReadPacket()
 			if err != nil {
-				var disc minecraft.DisconnectError
-				if ok := errors.As(err, &disc); !ok {
-					// Error is not a disconnect error, so log the error.
-					log.Logger.Errorln("Failed to read Packet from Client", err)
+				if !arg.handlePacketError(err, player, "Failed to read packet from client") {
+					return
 				}
-				return
+				continue
 			}
 
 			ok, pk, err := arg.Handlers.HandlePacket(pk, player, "Client")
 			if err != nil {
-				log.Logger.Errorln(err)
+				log.Logger.Errorln("Error handling packet from client", err)
 			}
 
 			if ok {
 				if err := serverConn.WritePacket(pk); err != nil {
-					var disc minecraft.DisconnectError
-					if ok := errors.As(err, &disc); ok {
-						arg.DisconnectPlayer(player, disc.Error())
+					if !arg.handlePacketError(err, player, "Failed to write packet to proxy") {
+						return
 					}
-					log.Logger.Errorln(err)
-					return
+					continue
 				}
 			}
 		}
 	}()
+
 	go func() { // proxy->server
-		defer arg.DisconnectPlayer(player, "Server Connection closed")
+		defer func() {
+			if r := recover(); r != nil {
+				log.Logger.Errorf("Recovered from panic in HandlePacket from Server: %v", r)
+				arg.DisconnectPlayer(player, "An internal error occurred")
+			}
+			arg.DisconnectPlayer(player, "Server Connection closed")
+		}()
 		for {
 			pk, err := serverConn.ReadPacket()
 			if err != nil {
-				var disc minecraft.DisconnectError
-				if ok := errors.As(err, &disc); ok {
-					arg.DisconnectPlayer(player, disc.Error())
+				if !arg.handlePacketError(err, player, "Failed to read packet from proxy") {
+					return
 				}
-				log.Logger.Errorln("Failed to read Packet from Server", err)
-				return
+				continue
 			}
 
 			ok, pk, err := arg.Handlers.HandlePacket(pk, player, "Server")
@@ -288,11 +336,29 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 
 			if ok {
 				if err := conn.WritePacket(pk); err != nil {
-					return
+					if !arg.handlePacketError(err, player, "Failed to write packet to server") {
+						return
+					}
+					continue
 				}
 			}
 		}
 	}()
+}
+
+// handlePacketError handles an error that occurred while reading a packet.
+// It returns true if the player was disconnected, and false if it wasn't.
+func (arg *Proxy) handlePacketError(err error, player human.Human, msg string) bool {
+	var disc minecraft.DisconnectError
+	if ok := errors.As(err, &disc); ok {
+		arg.DisconnectPlayer(player, disc.Error())
+		return false
+	}
+	if !strings.Contains(err.Error(), "use of closed network connection") {
+		// Error is not a disconnect error, so log the error.
+		log.Logger.Errorln(msg, err)
+	}
+	return true
 }
 
 // DisconnectPlayer disconnects a player from the proxy.
