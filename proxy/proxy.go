@@ -207,6 +207,7 @@ func (arg *Proxy) handleConn(conn *minecraft.Conn) {
 	log.Logger.Infoln(player.GetName(), "joined the server")
 	player.SendXUIDToAddon()
 	// arg.UpdatePlayerDetails(player)
+	// arg.PlayerManager.AddPlayer(player)
 
 	arg.startPacketHandlers(player, conn, serverConn)
 }
@@ -272,12 +273,6 @@ func (arg *Proxy) initializeConnection(conn *minecraft.Conn, serverConn *minecra
 }
 
 func (arg *Proxy) startPacketHandlers(player human.Human, conn *minecraft.Conn, serverConn *minecraft.Conn) {
-	// player := player.GetPlayer(conn, serverConn)
-	// log.Logger.Infoln(player.GetName(), "joined the server")
-	// player.SendXUIDToAddon()
-	// ProxyInstance.PlayerManager.AddPlayer(player)
-	// arg.UpdatePlayerDetails(player)
-
 	go func() { // client->proxy
 		defer func() {
 			if r := recover(); r != nil {
@@ -448,7 +443,7 @@ func (arg *Proxy) DisconnectPlayer(pl human.Human, message string) {
 	// Disconnect
 	pl.GetSession().Connection.ServerConn.Close()
 	arg.Listener.Disconnect(pl.GetSession().Connection.ClientConn, message)
-	arg.PlayerManager.RemovePlayer(pl.(*player.Player))
+	// arg.PlayerManager.RemovePlayer(pl.(*player.Player))
 }
 
 type PlayerDetails struct {
